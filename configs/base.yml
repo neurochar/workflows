@@ -1,0 +1,38 @@
+workflows_app:
+    name: workflows
+    version: 1.0.0
+    base:
+        start_timeout_sec: 30
+        stop_timeout_sec: 15
+        is_prod: false
+        use_fx_logger: true
+        use_logger: true
+
+temporal:
+    host: "127.0.0.1:7233"
+    namespace: "default"
+
+storage:
+    s3_endpoint: "http://127.0.0.1:9000"
+    s3_access_key: "minioadmin"
+    s3_secret_key: "minioadmin"
+    s3_region: "local"
+    s3_url_is_host: false
+    s3_url: "http://localhost:9000"
+    s3_url_host_prefix:
+    s3_url_host_postfix:
+
+backend:
+    grpc_private_endpoint: "127.0.0.1:50052"
+
+workers:
+    ocr:
+        service: "127.0.0.1:50061"
+        readiness: "http://127.0.0.1:8010/ready"
+        fallback_service: "127.0.0.1:50062"
+    word2pdf:
+        service: "127.0.0.1:50063"
+        readiness: "http://127.0.0.1:8012/ready"
+    pd_remover:
+        service: "http://127.0.0.1:8013"
+        readiness: "http://127.0.0.1:8013/health"

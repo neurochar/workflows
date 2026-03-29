@@ -1,0 +1,29 @@
+version: v2
+
+clean: true
+
+inputs:
+    - directory: E:\projects\neurochar\backend
+
+managed:
+    enabled: true
+    disable:
+        - module: buf.build/googleapis/googleapis
+        - module: buf.build/bufbuild/protovalidate
+        - module: buf.build/grpc-ecosystem/grpc-gateway
+    override:
+        - file_option: go_package_prefix
+          value: github.com/neurochar/workflows/pkg/proto_pb
+
+plugins:
+    - local: protoc-gen-go
+      out: pkg/proto_pb
+      opt: paths=source_relative
+
+    - local: protoc-gen-go-grpc
+      out: pkg/proto_pb
+      opt: paths=source_relative
+
+    - local: protoc-gen-grpc-gateway
+      out: pkg/proto_pb
+      opt: paths=source_relative

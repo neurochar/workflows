@@ -1,0 +1,130 @@
+# ------------------------------------------------------------
+# ConfigMap приложения backend-app
+# ------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: backend-config
+    namespace: neurochar
+
+data:
+    TZ: Europe/Moscow
+    GLOBAL_SERVER_IP: "79.174.83.151"
+    GLOBAL_PROJECT_FRONTEND_URL: "https://neurochar.ru"
+    GLOBAL_PROJECT_API_URL: "https://neurochar.ru"
+    GLOBAL_CPANEL_FRONTEND_URL: ""
+    GLOBAL_CPANEL_API_URL: "https://neurochar.ru"
+    GLOBAL_TENANT_MAIN_DOMAIN: "neurochar.ru"
+    GLOBAL_TENANT_URL_SCHEME: "https"
+    BACKEND_APP_BASE_IS_PROD: "true"
+    BACKEND_APP_BASE_USE_FX_LOGGER: "false"
+    BACKEND_APP_BASE_USE_LOGGER: "true"
+    BACKEND_APP_BASE_LOG_SQL_QUERIES: "false"
+    BACKEND_APP_BASE_LOG_HTTP: "true"
+    BACKEND_APP_HTTP_UNDER_PROXY: "true"
+    BACKEND_APP_HTTP_CORS_ALLOW_ORIGINS: "neurochar.ru"
+    CRONJOB_APP_BASE_IS_PROD: "true"
+    CRONJOB_APP_BASE_USE_FX_LOGGER: "false"
+    CRONJOB_APP_BASE_USE_LOGGER: "true"
+    CRONJOB_APP_BASE_LOG_SQL_QUERIES: "false"
+    CRONJOB_APP_BASE_LOG_JOB: "false"
+    CRONJOB_APP_JOBS_AUTOSTART: "true"
+    CPANEL_APP_BASE_IS_PROD: "true"
+    CPANEL_APP_BASE_USE_FX_LOGGER: "false"
+    CPANEL_APP_BASE_USE_LOGGER: "true"
+    CPANEL_APP_BASE_LOG_SQL_QUERIES: "false"
+    CPANEL_APP_BASE_LOG_HTTP: "true"
+    CPANEL_APP_HTTP_UNDER_PROXY: "true"
+    CPANEL_APP_HTTP_CORS_ALLOW_ORIGINS: "neurochar.ru"
+    STORAGE_S3_ENDPOINT: "https://storage.yandexcloud.net"
+    STORAGE_S3_REGION: "ru-central1"
+    STORAGE_S3_URL: "https://storage.yandexcloud.net"
+    STORAGE_S3_URL_IS_HOST: "true"
+    STORAGE_S3_URL_HOST_PREFIX: "https://"
+    STORAGE_S3_URL_HOST_POSTFIX: ".storage.yandexcloud.net"
+    EMAILING_SMTP_HOST: "smtp.yandex.ru"
+    EMAILING_SMTP_PORT: "587"
+    EMAILING_SMTP_USER: "no-reply@neurochar.ru"
+    EMAILING_DEFAULT_FROM_EMAIL: "no-reply@neurochar.ru"
+    EMAILING_DEFAULT_FROM_TITLE: "Нейрочар"
+    ALERTS_TARGET_CHANNEL: "-1002702081888"
+---
+# ------------------------------------------------------------
+# Deployment приложения backend-app
+# ------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: backend-app-deployment
+    namespace: neurochar
+
+spec:
+    replicas: 1
+
+    selector:
+        matchLabels:
+            app: backend-app
+
+    template:
+        metadata:
+            labels:
+                app: backend-app
+
+        spec:
+            containers:
+                - name: backend-app
+                  image: __BACKEND_APP_VERSION__
+                  imagePullPolicy: Always
+
+                  ports:
+                      - containerPort: 8080
+
+                  envFrom:
+                      - configMapRef:
+                            name: backend-config
+                      - secretRef:
+                            name: backend-app-secret
+
+                  resources:
+                      requests:
+                          ephemeral-storage: "100Mi"
+                      limits:
+                          ephemeral-storage: "250Mi"
+
+                  livenessProbe:
+                      httpGet:
+                          path: /v1/tests/liveness
+                          port: 8080
+                      initialDelaySeconds: 10
+                      periodSeconds: 30
+
+                  readinessProbe:
+                      httpGet:
+                          path: /v1/tests/readiness
+                          port: 8080
+                      initialDelaySeconds: 5
+                      periodSeconds: 60
+
+---
+# ------------------------------------------------------------
+# Service для приложения backend-app
+# ------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+    name: backend-app-service
+    namespace: neurochar
+    labels:
+        app: backend-app
+
+spec:
+    type: ClusterIP
+
+    selector:
+        app: backend-app
+
+    ports:
+        - name: http
+          port: 8080
+          targetPort: 8080
+          protocol: TCP
