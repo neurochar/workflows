@@ -11,7 +11,7 @@ data:
     WORKFLOWS_APP_BASE_IS_PROD: "true"
     WORKFLOWS_APP_BASE_USE_FX_LOGGER: "false"
     WORKFLOWS_APP_BASE_USE_LOGGER: "true"
-    TEMPORAL_HOST: temporal-service.neurochar.svc.cluster.local:7233
+    TEMPORAL_HOST: temporal-frontend.neurochar.svc.cluster.local:7233
     TEMPORAL_NAMESPACE: default
     STORAGE_S3_ENDPOINT: "https://storage.yandexcloud.net"
     STORAGE_S3_REGION: "ru-central1"
