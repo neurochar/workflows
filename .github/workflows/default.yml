@@ -1,0 +1,103 @@
+name: Build and Deploy
+
+on:
+    push:
+        branches: [master]
+    workflow_dispatch:
+
+jobs:
+    build:
+        runs-on: arc-runner-set
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Configure Docker auth for Yandex Container Registry
+              shell: bash
+              run: |
+                  mkdir -p .docker
+                  AUTH=$(printf 'json_key:%s' '${{ secrets.CI_REGISTRY_ACCOUNT }}' | base64 | tr -d '\n')
+                  cat > .docker/config.json <<EOF
+                  {
+                    "auths": {
+                      "cr.yandex": {
+                        "auth": "${AUTH}"
+                      }
+                    }
+                  }
+                  EOF
+
+            - name: Build and push image workflows-app
+              shell: bash
+              run: |
+                  docker run --rm \
+                    -v "${GITHUB_WORKSPACE}:/workspace" \
+                    -v "${GITHUB_WORKSPACE}/.docker:/kaniko/.docker" \
+                    gcr.io/kaniko-project/executor:debug \
+                    --context /workspace \
+                    --dockerfile /workspace/deployment/workflows.Dockerfile \
+                    --destination "${{ vars.CI_REGISTRY }}/workflows/workflows-app:${{ github.sha }}" \
+                    --destination "${{ vars.CI_REGISTRY }}/workflows/workflows-app:latest" \
+                    --cache=true
+
+    deploy:
+        runs-on: arc-runner-set
+        needs: build
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Install kubectl
+              shell: bash
+              run: |
+                  curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                  chmod +x kubectl
+                  sudo mv kubectl /usr/local/bin/kubectl
+
+            - name: Install Yandex Cloud CLI
+              shell: bash
+              run: |
+                  curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i /home/runner/yandex-cloud -n
+                  /home/runner/yandex-cloud/bin/yc version
+
+            - name: Restore kubeconfig
+              shell: bash
+              run: |
+                  mkdir -p "$HOME/.kube"
+                  echo '${{ secrets.KUBECONFIG_B64 }}' | base64 -d > "$HOME/.kube/config"
+                  chmod 600 "$HOME/.kube/config"
+
+            - name: Patch kubeconfig exec path
+              shell: bash
+              run: |
+                  sed -i 's#/home/kirill/yandex-cloud/bin/yc#/home/runner/yandex-cloud/bin/yc#g' "$HOME/.kube/config"
+                  grep -n "command:" "$HOME/.kube/config" || true
+
+            - name: Configure YC auth
+              shell: bash
+              run: |
+                  mkdir -p "$HOME/.config/yandex-cloud"
+                  echo '${{ secrets.YC_SERVICE_ACCOUNT_KEY }}' > "$HOME/.config/yandex-cloud/key.json"
+
+                  /home/runner/yandex-cloud/bin/yc config profile create default || true
+                  /home/runner/yandex-cloud/bin/yc config profile activate default
+                  /home/runner/yandex-cloud/bin/yc config set service-account-key "$HOME/.config/yandex-cloud/key.json"
+                  /home/runner/yandex-cloud/bin/yc config set cloud-id "${{ vars.YC_CLOUD_ID }}"
+                  /home/runner/yandex-cloud/bin/yc config set folder-id "${{ vars.YC_FOLDER_ID }}"
+
+                  /home/runner/yandex-cloud/bin/yc config list
+
+            - name: Verify cluster access
+              shell: bash
+              run: |
+                  kubectl --kubeconfig "$HOME/.kube/config" config current-context
+                  kubectl --kubeconfig "$HOME/.kube/config" get ns neurochar
+
+            - name: Deploy
+              shell: bash
+              run: |
+                  sed \
+                    -e "s|__WORKFLOWS_APP_VERSION__|${{ vars.CI_REGISTRY }}/workflows/workflows-app:${{ github.sha }}|g" \
+                    deployment/k8s.yaml | kubectl --kubeconfig "$HOME/.kube/config" apply -f -
